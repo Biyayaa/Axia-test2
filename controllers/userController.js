@@ -5,10 +5,10 @@ const jwt = require('jsonwebtoken');
 // Register
 exports.registerUser = async (req, res) => {
   try {
-    const { name, email, password, hobbies, isAdmin } = req.body;
+    const { name, email, password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = new User({ name, email, password: hashedPassword, hobbies, isAdmin });
+    const user = new User({ name, email, password: hashedPassword });
     await user.save();
 
     res.status(201).json({ message: 'User registered successfully', user });
@@ -23,13 +23,26 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(400).json({ message: 'This account does not exist' });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
+    // Generate JWT token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
-    res.json({ token, user });
+
+    // Set token as cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', 
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    // Exclude password from response
+    const { password: _, ...userData } = user.toObject();
+
+    res.json({ token, user: userData });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
